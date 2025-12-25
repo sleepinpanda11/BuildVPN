@@ -13,12 +13,12 @@ import androidx.core.app.NotificationCompat
 class MyVpnService : VpnService() {
     
     companion object {
-        private const val TAG = "VpnService"
+        private const val TAG = "MyVpnService"
         private const val CHANNEL_ID = "vpn_channel"
         private const val NOTIFICATION_ID = 1
         
+        @JvmStatic
         var isRunning = false
-            private set
     }
     
     private var vpnInterface: ParcelFileDescriptor? = null
@@ -38,10 +38,8 @@ class MyVpnService : VpnService() {
     
     private fun startVpn() {
         Log.d(TAG, "Starting VPN...")
-        
         val server = ConfigManager.getActiveServer(this)
         if (server == null) {
-            Log.e(TAG, "No active server")
             stopSelf()
             return
         }
@@ -51,47 +49,42 @@ class MyVpnService : VpnService() {
             .addAddress("10.0.0.2", 32)
             .addRoute("0.0.0.0", 0)
             .addDnsServer("8.8.8.8")
-            .addDnsServer("8.8.4.4")
             .setMtu(1500)
             .setBlocking(true)
         
         try {
             builder.addDisallowedApplication(packageName)
+            vpnInterface = builder.establish()
+            
+            if (vpnInterface == null) {
+                isRunning = false
+                stopSelf()
+                return
+            }
+            
+            isRunning = true
+            startForeground(NOTIFICATION_ID, createNotification("Connected to ${server.name}"))
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to exclude app", e)
-        }
-        
-        vpnInterface = builder.establish()
-        
-        if (vpnInterface == null) {
-            Log.e(TAG, "Failed to establish VPN")
+            isRunning = false
             stopSelf()
-            return
         }
-        
-        isRunning = true
-        startForeground(NOTIFICATION_ID, createNotification("Connected to ${server.name}"))
-        Log.d(TAG, "VPN started: ${server.name}")
     }
     
     private fun stopVpn() {
-        Log.d(TAG, "Stopping VPN...")
         isRunning = false
         vpnInterface?.close()
         vpnInterface = null
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
-    
+
     private fun createNotificationChannel() {
-        val channel = NotificationChannel(
-            CHANNEL_ID, "VPN Service", NotificationManager.IMPORTANCE_LOW
-        )
+        val channel = NotificationChannel(CHANNEL_ID, "VPN Service", NotificationManager.IMPORTANCE_LOW)
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
-    
+
     private fun createNotification(text: String): Notification {
-        val stopIntent = Intent(this, VpnService::class.java).apply { action = "STOP" }
+        val stopIntent = Intent(this, MyVpnService::class.java).apply { action = "STOP" }
         val stopPending = PendingIntent.getService(this, 1, stopIntent, 
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         
@@ -102,15 +95,5 @@ class MyVpnService : VpnService() {
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop", stopPending)
             .setOngoing(true)
             .build()
-    }
-    
-    override fun onDestroy() {
-        stopVpn()
-        super.onDestroy()
-    }
-    
-    override fun onRevoke() {
-        stopVpn()
-        super.onRevoke()
     }
 }
