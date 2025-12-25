@@ -24,15 +24,15 @@
         </activity>
 
         <service
-            android:name=".VpnService"
+            android:name=".MyVpnService"
             android:permission="android.permission.BIND_VPN_SERVICE"
             android:exported="false"
             android:foregroundServiceType="specialUse">
             <intent-filter>
-                <action android:name="android.net.VpnService" />
+                <action android:name="android.net.MyVpnService" />
             </intent-filter>
             <meta-data
-                android:name="android.net.VpnService.SUPPORTS_ALWAYS_ON"
+                android:name="android.net.MyVpnService.SUPPORTS_ALWAYS_ON"
                 android:value="true" />
         </service>
 

@@ -10,7 +10,7 @@ import android.os.ParcelFileDescriptor
 import android.util.Log
 import androidx.core.app.NotificationCompat
 
-class VpnService : VpnService() {
+class MyVpnService : VpnService() {
     
     companion object {
         private const val TAG = "VpnService"

@@ -31,7 +31,7 @@ class MainActivity : AppCompatActivity() {
         btnAddServer = findViewById(R.id.btnAddServer)
         
         btnConnect.setOnClickListener {
-            if (!VpnService.isRunning) {
+            if (!MyVpnService.isRunning) {
                 startVpn()
             } else {
                 stopVpn()
@@ -168,7 +168,7 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun updateUI() {
-        val connected = VpnService.isRunning
+        val connected = MyVpnService.isRunning
         
         btnConnect.text = if (connected) "Disconnect" else "Connect"
         tvStatus.text = if (connected) "Status: Connected" else "Status: Disconnected"
