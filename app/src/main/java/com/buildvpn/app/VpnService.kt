@@ -7,45 +7,110 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.net.VpnService
 import android.os.ParcelFileDescriptor
+import android.util.Log
 import androidx.core.app.NotificationCompat
 
 class VpnService : VpnService() {
+    
+    companion object {
+        private const val TAG = "VpnService"
+        private const val CHANNEL_ID = "vpn_channel"
+        private const val NOTIFICATION_ID = 1
+        
+        var isRunning = false
+            private set
+    }
     
     private var vpnInterface: ParcelFileDescriptor? = null
     
     override fun onCreate() {
         super.onCreate()
-        val channel = NotificationChannel("vpn", "VPN", NotificationManager.IMPORTANCE_LOW)
-        getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        createNotificationChannel()
     }
     
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            "START" -> {
-                vpnInterface = Builder()
-                    .setSession("BuildVPN")
-                    .addAddress("10.0.0.2", 32)
-                    .addRoute("0.0.0.0", 0)
-                    .addDnsServer("8.8.8.8")
-                    .establish()
-                
-                val notification = NotificationCompat.Builder(this, "vpn")
-                    .setContentTitle("BuildVPN Active")
-                    .setContentText("VPN is connected")
-                    .setSmallIcon(android.R.drawable.ic_lock_lock)
-                    .setContentIntent(PendingIntent.getActivity(this, 0, 
-                        Intent(this, MainActivity::class.java), 
-                        PendingIntent.FLAG_IMMUTABLE))
-                    .build()
-                
-                startForeground(1, notification)
-            }
-            "STOP" -> {
-                vpnInterface?.close()
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
-            }
+            "START" -> startVpn()
+            "STOP" -> stopVpn()
         }
         return START_STICKY
+    }
+    
+    private fun startVpn() {
+        Log.d(TAG, "Starting VPN...")
+        
+        val server = ConfigManager.getActiveServer(this)
+        if (server == null) {
+            Log.e(TAG, "No active server")
+            stopSelf()
+            return
+        }
+        
+        val builder = Builder()
+            .setSession("BuildVPN - ${server.name}")
+            .addAddress("10.0.0.2", 32)
+            .addRoute("0.0.0.0", 0)
+            .addDnsServer("8.8.8.8")
+            .addDnsServer("8.8.4.4")
+            .setMtu(1500)
+            .setBlocking(true)
+        
+        try {
+            builder.addDisallowedApplication(packageName)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to exclude app", e)
+        }
+        
+        vpnInterface = builder.establish()
+        
+        if (vpnInterface == null) {
+            Log.e(TAG, "Failed to establish VPN")
+            stopSelf()
+            return
+        }
+        
+        isRunning = true
+        startForeground(NOTIFICATION_ID, createNotification("Connected to ${server.name}"))
+        Log.d(TAG, "VPN started: ${server.name}")
+    }
+    
+    private fun stopVpn() {
+        Log.d(TAG, "Stopping VPN...")
+        isRunning = false
+        vpnInterface?.close()
+        vpnInterface = null
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+    
+    private fun createNotificationChannel() {
+        val channel = NotificationChannel(
+            CHANNEL_ID, "VPN Service", NotificationManager.IMPORTANCE_LOW
+        )
+        getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+    }
+    
+    private fun createNotification(text: String): Notification {
+        val stopIntent = Intent(this, VpnService::class.java).apply { action = "STOP" }
+        val stopPending = PendingIntent.getService(this, 1, stopIntent, 
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("BuildVPN")
+            .setContentText(text)
+            .setSmallIcon(android.R.drawable.ic_lock_lock)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop", stopPending)
+            .setOngoing(true)
+            .build()
+    }
+    
+    override fun onDestroy() {
+        stopVpn()
+        super.onDestroy()
+    }
+    
+    override fun onRevoke() {
+        stopVpn()
+        super.onRevoke()
     }
 }
